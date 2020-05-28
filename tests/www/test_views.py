@@ -28,13 +28,15 @@ import sys
 import tempfile
 import unittest
 import urllib
-from datetime import datetime as dt, timedelta
+from contextlib import contextmanager
+from datetime import datetime as dt, timedelta, timezone as tz
+from typing import Any, Dict, Generator, List, NamedTuple
 from unittest import mock
 from urllib.parse import quote_plus
 
 import jinja2
 import pytest
-from flask import Markup, session as flask_session, url_for
+from flask import Markup, session as flask_session, template_rendered, url_for
 from parameterized import parameterized
 from werkzeug.test import Client
 from werkzeug.wrappers import BaseResponse
@@ -59,18 +61,64 @@ from airflow.utils.state import State
 from airflow.utils.timezone import datetime
 from airflow.utils.types import DagRunType
 from airflow.www import app as application
+from tests.test_utils.asserts import assert_queries_count
 from tests.test_utils.config import conf_vars
 from tests.test_utils.db import clear_db_runs
+
+
+class TemplateWithContext(NamedTuple):
+    template: jinja2.environment.Template
+    context: Dict[str, Any]
+
+    @property
+    def name(self):
+        return self.template.name
+
+    @property
+    def local_context(self):
+        """Returns context without global arguments"""
+        result = copy.copy(self.context)
+        keys_to_delete = [
+            # flask.templating._default_template_ctx_processor
+            'g',
+            'request',
+            'session',
+            # flask_wtf.csrf.CSRFProtect.init_app
+            'csrf_token',
+            # flask_login.utils._user_context_processor
+            'current_user',
+            # flask_appbuilder.baseviews.BaseView.render_template
+            'appbuilder',
+            'base_template',
+            # airflow.www.app.py.create_app (inner method - jinja_globals)
+            'server_timezone',
+            'default_ui_timezone',
+            'hostname',
+            'navbar_color',
+            'log_fetch_delay_sec',
+            'log_auto_tailing_offset',
+            'log_animation_speed',
+            # airflow.www.static_config.configure_manifest_files
+            'url_for_asset',
+            # airflow.www.views.AirflowBaseView.render_template
+            'scheduler_job',
+            # airflow.www.views.AirflowBaseView.extra_args
+            'macros',
+        ]
+        for key in keys_to_delete:
+            del result[key]
+
+        return result
 
 
 class TestBase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.app, cls.appbuilder = application.create_app(session=Session, testing=True)
+        settings.configure_orm()
+        cls.session = settings.Session
+        cls.app, cls.appbuilder = application.create_app(testing=True)
         cls.app.config['WTF_CSRF_ENABLED'] = False
         cls.app.jinja_env.undefined = jinja2.StrictUndefined
-        settings.configure_orm()
-        cls.session = Session
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -98,6 +146,20 @@ class TestBase(unittest.TestCase):
 
     def logout(self):
         return self.client.get('/logout/')
+
+    @contextmanager
+    def capture_templates(self) -> Generator[List[TemplateWithContext], None, None]:
+        recorded = []
+
+        def record(sender, template, context, **extra):  # pylint: disable=unused-argument
+            recorded.append(TemplateWithContext(template, context))
+        template_rendered.connect(record, self.app)  # type: ignore
+        try:
+            yield recorded
+        finally:
+            template_rendered.disconnect(record, self.app)  # type: ignore
+
+        assert recorded, "Failed to catch the templates"
 
     @classmethod
     def clear_table(cls, model):
@@ -301,7 +363,7 @@ class TestMountPoint(unittest.TestCase):
     def setUpClass(cls):
         application.app = None
         application.appbuilder = None
-        app = application.cached_app(config={'WTF_CSRF_ENABLED': False}, session=Session, testing=True)
+        app = application.cached_app(config={'WTF_CSRF_ENABLED': False}, testing=True)
         cls.client = Client(app, BaseResponse)
 
     @classmethod
@@ -366,7 +428,8 @@ class TestAirflowBaseViews(TestBase):
             state=State.RUNNING)
 
     def test_index(self):
-        resp = self.client.get('/', follow_redirects=True)
+        with assert_queries_count(37):
+            resp = self.client.get('/', follow_redirects=True)
         self.check_content_in_response('DAGs', resp)
 
     def test_doc_site_url(self):
@@ -440,8 +503,23 @@ class TestAirflowBaseViews(TestBase):
         self.assertIsNone(None, resp_json['scheduler']['latest_scheduler_heartbeat'])
 
     def test_home(self):
-        resp = self.client.get('home', follow_redirects=True)
-        self.check_content_in_response('DAGs', resp)
+        with self.capture_templates() as templates:
+            resp = self.client.get('home', follow_redirects=True)
+            self.check_content_in_response('DAGs', resp)
+            val_state_color_mapping = 'const STATE_COLOR = {"failed": "red", ' \
+                                      '"null": "lightblue", "queued": "gray", ' \
+                                      '"removed": "lightgrey", "running": "lime", ' \
+                                      '"scheduled": "tan", "shutdown": "blue", ' \
+                                      '"skipped": "pink", "success": "green", ' \
+                                      '"up_for_reschedule": "turquoise", ' \
+                                      '"up_for_retry": "gold", "upstream_failed": "orange"};'
+            self.check_content_in_response(val_state_color_mapping, resp)
+
+        self.assertEqual(len(templates), 1)
+        self.assertEqual(templates[0].name, 'airflow/dags.html')
+        state_color_mapping = State.state_color.copy()
+        state_color_mapping["null"] = state_color_mapping.pop(None)
+        self.assertEqual(templates[0].local_context['state_color'], state_color_mapping)
 
     def test_users_list(self):
         resp = self.client.get('users/list', follow_redirects=True)
@@ -522,7 +600,7 @@ class TestAirflowBaseViews(TestBase):
         resp = self.client.post('task_stats', follow_redirects=True)
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(set(list(resp.json.items())[0][1][0].keys()),
-                         {'state', 'count', 'color'})
+                         {'state', 'count'})
 
     @conf_vars({("webserver", "show_recent_stats_for_completed_runs"): "False"})
     def test_task_stats_only_noncompleted(self):
@@ -965,7 +1043,7 @@ class TestLogView(TestBase):
         sys.path.append(self.settings_folder)
 
         with conf_vars({('logging', 'logging_config_class'): 'airflow_local_settings.LOGGING_CONFIG'}):
-            self.app, self.appbuilder = application.create_app(session=Session, testing=True)
+            self.app, self.appbuilder = application.create_app(testing=True)
             self.app.config['WTF_CSRF_ENABLED'] = False
             self.client = self.app.test_client()
             settings.configure_orm()
@@ -1139,11 +1217,20 @@ class TestLogView(TestBase):
 
 class TestVersionView(TestBase):
     def test_version(self):
-        resp = self.client.get('version', data=dict(
-            username='test',
-            password='test'
-        ), follow_redirects=True)
-        self.check_content_in_response('Version Info', resp)
+        with self.capture_templates() as templates:
+            resp = self.client.get('version', data=dict(
+                username='test',
+                password='test'
+            ), follow_redirects=True)
+            self.check_content_in_response('Version Info', resp)
+
+        self.assertEqual(len(templates), 1)
+        self.assertEqual(templates[0].name, 'airflow/version.html')
+        self.assertEqual(templates[0].local_context, dict(
+            airflow_version=version.version,
+            git_version=mock.ANY,
+            title='Version Info'
+        ))
 
 
 class ViewWithDateTimeAndNumRunsAndDagRunsFormTester:
@@ -1609,7 +1696,7 @@ class TestDagACLView(TestBase):
         resp = self.client.post('dag_stats', follow_redirects=True)
         self.check_content_in_response('example_bash_operator', resp)
         self.assertEqual(set(list(resp.json.items())[0][1][0].keys()),
-                         {'state', 'count', 'color'})
+                         {'state', 'count'})
 
     def test_dag_stats_failure(self):
         self.logout()
@@ -2500,7 +2587,56 @@ class TestDagRunModelView(TestBase):
     def tearDown(self):
         self.clear_table(models.DagRun)
 
-    def test_create_dagrun(self):
+    def test_create_dagrun_execution_date_with_timezone_utc(self):
+        data = {
+            "state": "running",
+            "dag_id": "example_bash_operator",
+            "execution_date": "2018-07-06 05:04:03Z",
+            "run_id": "test_create_dagrun",
+        }
+        resp = self.client.post('/dagrun/add',
+                                data=data,
+                                follow_redirects=True)
+        self.check_content_in_response('Added Row', resp)
+
+        dr = self.session.query(models.DagRun).one()
+
+        self.assertEqual(dr.execution_date, dt(2018, 7, 6, 5, 4, 3, tzinfo=tz.utc))
+
+    def test_create_dagrun_execution_date_with_timezone_edt(self):
+        data = {
+            "state": "running",
+            "dag_id": "example_bash_operator",
+            "execution_date": "2018-07-06 05:04:03-04:00",
+            "run_id": "test_create_dagrun",
+        }
+        resp = self.client.post('/dagrun/add',
+                                data=data,
+                                follow_redirects=True)
+        self.check_content_in_response('Added Row', resp)
+
+        dr = self.session.query(models.DagRun).one()
+
+        self.assertEqual(dr.execution_date, dt(2018, 7, 6, 5, 4, 3, tzinfo=tz(timedelta(hours=-4))))
+
+    def test_create_dagrun_execution_date_with_timezone_pst(self):
+        data = {
+            "state": "running",
+            "dag_id": "example_bash_operator",
+            "execution_date": "2018-07-06 05:04:03-08:00",
+            "run_id": "test_create_dagrun",
+        }
+        resp = self.client.post('/dagrun/add',
+                                data=data,
+                                follow_redirects=True)
+        self.check_content_in_response('Added Row', resp)
+
+        dr = self.session.query(models.DagRun).one()
+
+        self.assertEqual(dr.execution_date, dt(2018, 7, 6, 5, 4, 3, tzinfo=tz(timedelta(hours=-8))))
+
+    @conf_vars({("core", "default_timezone"): "America/Toronto"})
+    def test_create_dagrun_execution_date_without_timezone_default_edt(self):
         data = {
             "state": "running",
             "dag_id": "example_bash_operator",
@@ -2514,14 +2650,30 @@ class TestDagRunModelView(TestBase):
 
         dr = self.session.query(models.DagRun).one()
 
-        self.assertEqual(dr.execution_date, timezone.convert_to_utc(datetime(2018, 7, 6, 5, 4, 3)))
+        self.assertEqual(dr.execution_date, dt(2018, 7, 6, 5, 4, 3, tzinfo=tz(timedelta(hours=-4))))
+
+    def test_create_dagrun_execution_date_without_timezone_default_utc(self):
+        data = {
+            "state": "running",
+            "dag_id": "example_bash_operator",
+            "execution_date": "2018-07-06 05:04:03",
+            "run_id": "test_create_dagrun",
+        }
+        resp = self.client.post('/dagrun/add',
+                                data=data,
+                                follow_redirects=True)
+        self.check_content_in_response('Added Row', resp)
+
+        dr = self.session.query(models.DagRun).one()
+
+        self.assertEqual(dr.execution_date, dt(2018, 7, 6, 5, 4, 3, tzinfo=tz.utc))
 
     def test_create_dagrun_valid_conf(self):
         conf_value = dict(Valid=True)
         data = {
             "state": "running",
             "dag_id": "example_bash_operator",
-            "execution_date": "2018-07-06 05:05:03",
+            "execution_date": "2018-07-06 05:05:03-02:00",
             "run_id": "test_create_dagrun_valid_conf",
             "conf": json.dumps(conf_value)
         }

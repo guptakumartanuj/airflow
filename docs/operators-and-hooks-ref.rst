@@ -164,7 +164,7 @@ Foundation.
      -
 
    * - `Apache Spark <https://spark.apache.org/>`__
-     -
+     - :doc:`How to use <howto/operator/apache/spark>`
      - :mod:`airflow.providers.apache.spark.hooks.spark_jdbc`,
        :mod:`airflow.providers.apache.spark.hooks.spark_jdbc_script`,
        :mod:`airflow.providers.apache.spark.hooks.spark_sql`,
@@ -387,6 +387,12 @@ These integrations allow you to perform various operations within the Amazon Web
      -
      - :mod:`airflow.providers.amazon.aws.sensors.glue_catalog_partition`
 
+   * - `AWS Glue <https://aws.amazon.com/glue/>`__
+     -
+     - :mod:`airflow.providers.amazon.aws.hooks.glue`
+     - :mod:`airflow.providers.amazon.aws.operators.glue`
+     - :mod:`airflow.providers.amazon.aws.sensors.glue`
+
    * - `AWS Lambda <https://aws.amazon.com/lambda/>`__
      -
      - :mod:`airflow.providers.amazon.aws.hooks.lambda_function`
@@ -418,13 +424,20 @@ These integrations allow you to perform various operations within the Amazon Web
      -
 
    * - `Amazon EC2 <https://aws.amazon.com/ec2/>`__
+     -
+     - :mod:`airflow.providers.amazon.aws.hooks.ec2`
+     - :mod:`airflow.providers.amazon.aws.operators.ec2_start_instance`,
+       :mod:`airflow.providers.amazon.aws.operators.ec2_stop_instance`,
+     - :mod:`airflow.providers.amazon.aws.sensors.ec2_instance_state`
+
+   * - `Amazon ECS <https://aws.amazon.com/ecs/>`__
      - :doc:`How to use <howto/operator/amazon/aws/ecs>`
      -
      - :mod:`airflow.providers.amazon.aws.operators.ecs`
      -
 
    * - `Amazon EMR <https://aws.amazon.com/emr/>`__
-     -
+     - :doc:`How to use <howto/operator/amazon/aws/emr>`
      - :mod:`airflow.providers.amazon.aws.hooks.emr`
      - :mod:`airflow.providers.amazon.aws.operators.emr_add_steps`,
        :mod:`airflow.providers.amazon.aws.operators.emr_create_job_flow`,
@@ -502,7 +515,7 @@ These integrations allow you to copy data from/to Amazon Web Services.
 
        All GCP services :ref:`[1] <integration:GCP-Discovery>`
      - `Amazon Simple Storage Service (S3) <https://aws.amazon.com/s3/>`__
-     -
+     - :doc:`How to use <howto/operator/amazon/aws/google_api_to_s3_transfer>`
      - :mod:`airflow.providers.amazon.aws.operators.google_api_to_s3_transfer`
 
    * - `Amazon DataSync <https://aws.amazon.com/datasync/>`__
@@ -558,7 +571,7 @@ These integrations allow you to copy data from/to Amazon Web Services.
 
    * - `Internet Message Access Protocol (IMAP) <https://tools.ietf.org/html/rfc3501>`__
      - `Amazon Simple Storage Service (S3) <https://aws.amazon.com/s3/>`__
-     -
+     - :doc:`How to use <howto/operator/amazon/aws/imap_attachment_to_s3>`
      - :mod:`airflow.providers.amazon.aws.operators.imap_attachment_to_s3`
 
    * - `MongoDB <https://www.mongodb.com/what-is-mongodb>`__
@@ -572,7 +585,7 @@ These integrations allow you to copy data from/to Amazon Web Services.
      - :mod:`airflow.providers.amazon.aws.operators.sftp_to_s3`
 
 :ref:`[1] <integration:AWS-Discovery-ref>` Those discovery-based operators use
-:class:`airflow.providers.google.cloud.hooks.discovery_api.GoogleDiscoveryApiHook` to communicate with Google
+:class:`~airflow.providers.google.common.hooks.discovery_api.GoogleDiscoveryApiHook` to communicate with Google
 Services via the `Google API Python Client <https://github.com/googleapis/google-api-python-client>`__.
 Please note that this library is in maintenance mode hence it won't fully support GCP in the future.
 Therefore it is recommended that you use the custom GCP Service Operators for working with the Google
@@ -585,7 +598,7 @@ Google
 
 Airflow has support for the `Google service <https://developer.google.com/>`__.
 
-All hooks are based on :class:`airflow.providers.google.common.hooks.base.GoogleBaseHook`. Some integration
+All hooks are based on :class:`airflow.providers.google.common.hooks.base_google.GoogleBaseHook`. Some integration
 also use :mod:`airflow.providers.google.common.hooks.discovery_api`.
 
 See the :doc:`GCP connection type <howto/connection/gcp>` documentation to
@@ -754,7 +767,7 @@ These integrations allow you to perform various operations within the Google Clo
      -
 
    * - `Cloud Speech-to-Text <https://cloud.google.com/speech-to-text/>`__
-     - :doc:`How to use <howto/operator/gcp/speech>`
+     - :doc:`How to use <howto/operator/gcp/speech_to_text>`
      - :mod:`airflow.providers.google.cloud.hooks.speech_to_text`
      - :mod:`airflow.providers.google.cloud.operators.speech_to_text`
      -
@@ -790,7 +803,7 @@ These integrations allow you to perform various operations within the Google Clo
      -
 
    * - `Cloud Text-to-Speech <https://cloud.google.com/text-to-speech/>`__
-     - :doc:`How to use <howto/operator/gcp/speech>`
+     - :doc:`How to use <howto/operator/gcp/text_to_speech>`
      - :mod:`airflow.providers.google.cloud.hooks.text_to_speech`
      - :mod:`airflow.providers.google.cloud.operators.text_to_speech`
      -
@@ -832,7 +845,7 @@ These integrations allow you to copy data from/to Google Cloud Platform.
 
        All services :ref:`[1] <integration:GCP-Discovery>`
      - `Amazon Simple Storage Service (S3) <https://aws.amazon.com/s3/>`__
-     -
+     - :doc:`How to use <howto/operator/amazon/aws/google_api_to_s3_transfer>`
      - :mod:`airflow.providers.amazon.aws.operators.google_api_to_s3_transfer`
 
    * - `Amazon Simple Storage Service (S3) <https://aws.amazon.com/s3/>`__
@@ -951,7 +964,7 @@ These integrations allow you to copy data from/to Google Cloud Platform.
 .. _integration:GCP-Discovery:
 
 :ref:`[1] <integration:GCP-Discovery-ref>` Those discovery-based operators use
-:class:`airflow.providers.google.cloud.hooks.discovery_api.GoogleDiscoveryApiHook` to communicate with Google
+:class:`~airflow.providers.google.common.hooks.discovery_api.GoogleDiscoveryApiHook` to communicate with Google
 Services via the `Google API Python Client <https://github.com/googleapis/google-api-python-client>`__.
 Please note that this library is in maintenance mode hence it won't fully support Google in the future.
 Therefore it is recommended that you use the custom Google Service Operators for working with the Google
@@ -967,7 +980,7 @@ Other operators and hooks
      - Operator
      - Hook
 
-   * - :doc:`How to use <howto/operator/gcp/translate-speech>`
+   * - :doc:`How to use <howto/operator/gcp/translate_speech>`
      - :mod:`airflow.providers.google.cloud.operators.translate_speech`
      -
 
@@ -1054,7 +1067,7 @@ Airflow has a limited support for the `Yandex.Cloud <https://cloud.yandex.com/>`
 See the :doc:`Yandex.Cloud connection type <howto/connection/yandexcloud>` documentation to
 configure connections to Yandex.Cloud.
 
-All hooks are based on :class:`airflow.contrib.hooks.yandexcloud_base_hook.YandexGoogleBaseHook`.
+All hooks are based on :class:`airflow.providers.yandex.hooks.yandex.YandexCloudBaseHook`.
 
 .. note::
     You can learn how to use Yandex.Cloud integrations by analyzing the
@@ -1080,7 +1093,7 @@ These integrations allow you to perform various operations within the Yandex.Clo
    * - `Base Classes <https://cloud.yandex.com>`__
      - :doc:`How to use <howto/operator/yandexcloud>`
      - :mod:`airflow.providers.yandex.hooks.yandex`
-     - :mod:`airflow.providers.yandex.operators.yandexcloud_base_operator`
+     -
      -
 
    * - `Data Proc <https://cloud.yandex.com/services/data-proc>`__
@@ -1356,7 +1369,7 @@ These integrations allow you to perform various operations using various softwar
    * - `Presto <http://prestodb.github.io/>`__
      -
      - :mod:`airflow.providers.presto.hooks.presto`
-     - :mod:`airflow.providers.presto.operators.presto_check`
+     -
      -
 
    * - `Python <https://www.python.org>`__
@@ -1584,7 +1597,7 @@ These integrations allow you to copy data.
 
    * - `Internet Message Access Protocol (IMAP) <https://tools.ietf.org/html/rfc3501>`__
      - `Amazon Simple Storage Service (S3) <https://aws.amazon.com/s3/>`__
-     -
+     - :doc:`How to use <howto/operator/amazon/aws/imap_attachment_to_s3>`
      - :mod:`airflow.providers.amazon.aws.operators.imap_attachment_to_s3`
 
    * - `SSH File Transfer Protocol (SFTP) <https://tools.ietf.org/wg/secsh/draft-ietf-secsh-filexfer/>`__

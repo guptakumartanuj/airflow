@@ -37,8 +37,7 @@ from sqlalchemy.orm.session import make_transient
 from airflow import models, settings
 from airflow.configuration import conf
 from airflow.exceptions import AirflowException, TaskNotFound
-from airflow.executors.local_executor import LocalExecutor
-from airflow.executors.sequential_executor import SequentialExecutor
+from airflow.executors.executor_loader import ExecutorLoader
 from airflow.jobs.base_job import BaseJob
 from airflow.models import DAG, DagModel, SlaMiss, errors
 from airflow.models.dagrun import DagRun
@@ -54,12 +53,13 @@ from airflow.utils.dag_processing import (
 )
 from airflow.utils.email import get_email_address_list, send_email
 from airflow.utils.log.logging_mixin import LoggingMixin, StreamLogWriter, set_context
+from airflow.utils.mixins import MultiprocessingStartMethodMixin
 from airflow.utils.session import provide_session
 from airflow.utils.state import State
 from airflow.utils.types import DagRunType
 
 
-class DagFileProcessorProcess(AbstractDagFileProcessorProcess, LoggingMixin):
+class DagFileProcessorProcess(AbstractDagFileProcessorProcess, LoggingMixin, MultiprocessingStartMethodMixin):
     """Runs DAG processing in a separate process using DagFileProcessor
 
     :param file_path: a Python file containing Airflow DAG definitions
@@ -181,8 +181,11 @@ class DagFileProcessorProcess(AbstractDagFileProcessorProcess, LoggingMixin):
         """
         Launch the process and start processing the DAG.
         """
-        self._parent_channel, _child_channel = multiprocessing.Pipe()
-        self._process = multiprocessing.Process(
+        start_method = self._get_multiprocessing_start_method()
+        context = multiprocessing.get_context(start_method)
+
+        self._parent_channel, _child_channel = context.Pipe()
+        self._process = context.Process(
             target=type(self)._run_file_processor,
             args=(
                 _child_channel,
@@ -305,6 +308,10 @@ class DagFileProcessorProcess(AbstractDagFileProcessorProcess, LoggingMixin):
         if self._start_time is None:
             raise AirflowException("Tried to get start time before it started!")
         return self._start_time
+
+    @property
+    def waitable_handle(self):
+        return self._process.sentinel
 
 
 class DagFileProcessor(LoggingMixin):
@@ -475,6 +482,7 @@ class DagFileProcessor(LoggingMixin):
                     email_sent = True
                     notification_sent = True
                 except Exception:  # pylint: disable=broad-except
+                    Stats.incr('sla_email_notification_failure')
                     self.log.exception("Could not send SLA Miss email notification for"
                                        " DAG %s", dag.dag_id)
             # If we sent any notification, update the sla_miss table
@@ -558,12 +566,11 @@ class DagFileProcessor(LoggingMixin):
         # this query should be replaced by find dagrun
         qry = (
             session.query(func.max(DagRun.execution_date))
-                .filter_by(dag_id=dag.dag_id)
-                .filter(or_(
-                    DagRun.external_trigger == False,  # noqa: E712 pylint: disable=singleton-comparison
-                    # add % as a wildcard for the like query
-                    DagRun.run_id.like(f"{DagRunType.SCHEDULED.value}__%")
-                )
+            .filter_by(dag_id=dag.dag_id)
+            .filter(or_(
+                DagRun.external_trigger == False,  # noqa: E712 pylint: disable=singleton-comparison
+                # add % as a wildcard for the like query
+                DagRun.run_id.like(f"{DagRunType.SCHEDULED.value}__%"))
             )
         )
         last_scheduled_run = qry.scalar()
@@ -580,7 +587,7 @@ class DagFileProcessor(LoggingMixin):
             now = timezone.utcnow()
             next_start = dag.following_schedule(now)
             last_start = dag.previous_schedule(now)
-            if next_start <= now:
+            if next_start <= now or isinstance(dag.schedule_interval, timedelta):
                 new_start = last_start
             else:
                 new_start = dag.previous_schedule(last_start)
@@ -883,8 +890,8 @@ class DagFileProcessor(LoggingMixin):
 
         :param dagbag: DagBag
         :type dagbag: models.DagBag
-        :param ti_keys_to_schedule:  List of task instnace keys which can be scheduled.
-        :param ti_keys_to_schedule:
+        :param ti_keys_to_schedule: List of task instnace keys which can be scheduled.
+        :type ti_keys_to_schedule: list
         """
         # Refresh all task instances that will be scheduled
         TI = models.TaskInstance
@@ -1006,8 +1013,6 @@ class SchedulerJob(BaseJob):
         self.do_pickle = do_pickle
         super().__init__(*args, **kwargs)
 
-        self.max_threads = conf.getint('scheduler', 'max_threads')
-
         if log:
             self._log = log
 
@@ -1088,6 +1093,7 @@ class SchedulerJob(BaseJob):
             .filter(models.TaskInstance.dag_id.in_(simple_dag_bag.dag_ids)) \
             .filter(models.TaskInstance.state.in_(old_states)) \
             .filter(or_(
+                # pylint: disable=comparison-with-callable
                 models.DagRun.state != State.RUNNING,
                 models.DagRun.state.is_(None)))  # pylint: disable=no-member
         # We need to do this for mysql as well because it can cause deadlocks
@@ -1522,18 +1528,12 @@ class SchedulerJob(BaseJob):
 
         # DAGs can be pickled for easier remote execution by some executors
         pickle_dags = False
-        if self.do_pickle and self.executor.__class__ not in (LocalExecutor, SequentialExecutor):
+        if self.do_pickle and self.executor_class not in (
+            ExecutorLoader.LOCAL_EXECUTOR, ExecutorLoader.SEQUENTIAL_EXECUTOR, ExecutorLoader.DASK_EXECUTOR
+        ):
             pickle_dags = True
 
         self.log.info("Processing each file at most %s times", self.num_runs)
-
-        def processor_factory(file_path, failure_callback_requests):
-            return DagFileProcessorProcess(
-                file_path=file_path,
-                pickle_dags=pickle_dags,
-                dag_id_white_list=self.dag_ids,
-                failure_callback_requests=failure_callback_requests
-            )
 
         # When using sqlite, we do not use async_mode
         # so the scheduler job and DAG parser don't access the DB at the same time.
@@ -1543,8 +1543,10 @@ class SchedulerJob(BaseJob):
         processor_timeout = timedelta(seconds=processor_timeout_seconds)
         self.processor_agent = DagFileProcessorAgent(self.subdir,
                                                      self.num_runs,
-                                                     processor_factory,
+                                                     type(self)._create_dag_file_processor,
                                                      processor_timeout,
+                                                     self.dag_ids,
+                                                     pickle_dags,
                                                      async_mode)
 
         try:
@@ -1584,6 +1586,18 @@ class SchedulerJob(BaseJob):
             self.processor_agent.end()
             self.log.info("Exited execute loop")
 
+    @staticmethod
+    def _create_dag_file_processor(file_path, failure_callback_requests, dag_ids, pickle_dags):
+        """
+        Creates DagFileProcessorProcess instance.
+        """
+        return DagFileProcessorProcess(
+            file_path=file_path,
+            pickle_dags=pickle_dags,
+            dag_id_white_list=dag_ids,
+            failure_callback_requests=failure_callback_requests
+        )
+
     def _run_scheduler_loop(self):
         """
         The actual scheduler loop. The main steps in the loop are:
@@ -1601,9 +1615,6 @@ class SchedulerJob(BaseJob):
 
         :rtype: None
         """
-        # Last time that self.heartbeat() was called.
-        last_self_heartbeat_time = timezone.utcnow()
-
         is_unit_test = conf.getboolean('core', 'unit_test_mode')
 
         # For the execute duration, parse and schedule DAGs
@@ -1628,12 +1639,7 @@ class SchedulerJob(BaseJob):
                 continue
 
             # Heartbeat the scheduler periodically
-            time_since_last_heartbeat = (timezone.utcnow() -
-                                         last_self_heartbeat_time).total_seconds()
-            if time_since_last_heartbeat > self.heartrate:
-                self.log.debug("Heartbeating the scheduler")
-                self.heartbeat()
-                last_self_heartbeat_time = timezone.utcnow()
+            self.heartbeat(only_if_necessary=True)
 
             self._emit_pool_metrics()
 

@@ -655,6 +655,8 @@ This is the current syntax for  `./breeze <./breeze>`_:
     cleanup-image                            Cleans up the container image created
     exec                                     Execs into running breeze container in new terminal
     generate-requirements                    Generates pinned requirements for pip dependencies
+    prepare-backport-readme                  Prepares backport packages readme files
+    prepare-backport-packages                Prepares backport packages
     initialize-local-virtualenv              Initializes local virtualenv
     setup-autocomplete                       Sets up autocomplete for breeze
     stop                                     Stops the docker-compose environment
@@ -774,6 +776,12 @@ This is the current syntax for  `./breeze <./breeze>`_:
                  async,aws,azure,celery,dask,elasticsearch,gcp,kubernetes,mysql,postgres,redis,slack,
                  ssh,statsd,virtualenv
 
+  --additional-extras
+          Additional extras to pass to build images The default is no additional extras.
+
+  --additional-python-deps
+          Additional python dependencies to use when building the images.
+
   -C, --force-clean-images
           Force build images with cache disabled. This will remove the pulled or build images
           and start building images from scratch. This might take a long time.
@@ -870,6 +878,89 @@ This is the current syntax for  `./breeze <./breeze>`_:
   ####################################################################################################
 
 
+  Detailed usage for command: prepare-backport-readme
+
+  breeze [FLAGS] prepare-backport-readme -- <EXTRA_ARGS>
+
+        Prepares README.md files for backport packages. You can provide (after --) optional version
+        in the form of YYYY.MM.DD, optionally followed by the list of packages to generate readme for.
+        If the first parameter is not formatted as a date, then today is regenerated.
+        If no packages are specified, readme for all packages are generated.
+        If no date is specified, current date + 3 days is used (allowing for PMC votes to pass).
+
+        Examples:
+
+        'breeze prepare-backport-readme' or
+        'breeze prepare-backport-readme -- 2020.05.10' or
+        'breeze prepare-backport-readme -- 2020.05.10 https google amazon'
+
+        General form:
+
+        'breeze prepare-backport-readme -- YYYY.MM.DD <PACKAGE_ID> ...'
+
+        * YYYY.MM.DD - is the CALVER version of the package to prepare. Note that this date
+          cannot be earlier than the already released version (the script will fail if it
+          will be). It can be set in the future anticipating the future release date.
+
+        * <PACKAGE_ID> is usually directory in the airflow/providers folder (for example
+          'google' but in several cases, it might be one level deeper separated with
+          '.' for example 'apache.hive'
+
+  Flags:
+
+  -v, --verbose
+          Show verbose information about executed commands (enabled by default for running test).
+          Note that you can further increase verbosity and see all the commands executed by breeze
+          by running 'export VERBOSE_COMMANDS="true"' before running breeze.
+
+
+  ####################################################################################################
+
+
+  Detailed usage for command: prepare-backport-packages
+
+  breeze [FLAGS] prepare-backport-packages -- <EXTRA_ARGS>
+
+        Builds backport packages. You can provide (after --) optional list of packages to prepare.
+        If no packages are specified, readme for all packages are generated. You can specify optional
+        --version-suffix-for-svn flag to generate rc candidate packages to upload to SVN or
+        --version-suffix-for-pypi flag to generate rc candidates for PyPI packages.
+
+        Examples:
+
+        'breeze prepare-backport-packages' or
+        'breeze prepare-backport-packages -- google' or
+        'breeze prepare-backport-packages --version-suffix-for-svn rc1 -- http google amazon' or
+        'breeze prepare-backport-packages --version-suffix-for-pypi rc1 -- http google amazon'
+
+        General form:
+
+        'breeze prepare-backport-packages \
+              [--version-suffix-for-svn|--version-suffix-for-pypi] -- <PACKAGE_ID> ...'
+
+        * <PACKAGE_ID> is usually directory in the airflow/providers folder (for example
+          'google'), but in several cases, it might be one level deeper separated with '.'
+          for example 'apache.hive'
+
+  Flags:
+
+  -S, --version-suffix-for-pypi
+          Adds optional suffix to the version in the generated backport package. It can be used
+          to generate rc1/rc2 ... versions of the packages to be uploaded to PyPI.
+
+  -N, --version-suffix-for-svn
+          Adds optional suffix to the generated names of package. It can be used to generate
+          rc1/rc2 ... versions of the packages to be uploaded to SVN.
+
+  -v, --verbose
+          Show verbose information about executed commands (enabled by default for running test).
+          Note that you can further increase verbosity and see all the commands executed by breeze
+          by running 'export VERBOSE_COMMANDS="true"' before running breeze.
+
+
+  ####################################################################################################
+
+
   Detailed usage for command: initialize-local-virtualenv
 
   breeze [FLAGS] initialize-local-virtualenv -- <EXTRA_ARGS>
@@ -954,7 +1045,7 @@ This is the current syntax for  `./breeze <./breeze>`_:
 
   Detailed usage for command: docker-compose
 
-  breeze [FLAGS] docker-compose -- <EXTRA_ARGS>
+  breeze [FLAGS] docker-compose <DOCKER_COMPOSE_COMMAND> -- <EXTRA_ARGS>
 
         Run docker-compose command instead of entering the environment. Use 'help' as command
         to see available commands. The <EXTRA_ARGS> passed after -- are treated
@@ -1046,15 +1137,21 @@ This is the current syntax for  `./breeze <./breeze>`_:
 
   Detailed usage for command: static-check
 
-  breeze [FLAGS] static-check -- <EXTRA_ARGS>
+  breeze [FLAGS] static-check <STATIC_CHECK> -- <EXTRA_ARGS>
 
         Run selected static checks for currently changed files. You should specify static check that
         you would like to run or 'all' to run all checks. One of:
 
-                 all all-but-pylint bat-tests check-apache-license check-executables-have-shebangs
-                 check-hooks-apply check-merge-conflict check-xml debug-statements doctoc
-                 detect-private-key end-of-file-fixer flake8 forbid-tabs insert-license
-                 lint-dockerfile mixed-line-ending mypy pylint pylint-test setup-order shellcheck
+                 all all-but-pylint airflow-config-yaml base-operator bat-tests build
+                 build-providers-dependencies check-apache-license check-executables-have-shebangs
+                 check-hooks-apply check-integrations check-merge-conflict check-xml
+                 consistent-pylint daysago-import-check debug-statements detect-private-key doctoc
+                 end-of-file-fixer fix-encoding-pragma flake8 forbid-tabs
+                 incorrect-use-of-LoggingMixin insert-license isort lint-dockerfile mixed-line-ending
+                 mypy provide-create-sessions pydevd pylint pylint-tests python-no-log-warn
+                 rst-backticks setup-order shellcheck stylelint trailing-whitespace
+                 update-breeze-file update-extras update-local-yml-file update-setup-cfg-file
+                 yamllint
 
         You can pass extra arguments including options to to the pre-commit framework as
         <EXTRA_ARGS> passed after --. For example:
@@ -1072,15 +1169,21 @@ This is the current syntax for  `./breeze <./breeze>`_:
 
   Detailed usage for command: static-check-all-files
 
-  breeze [FLAGS] static-check-all-files -- <EXTRA_ARGS>
+  breeze [FLAGS] static-check-all-files <STATIC_CHECK> -- <EXTRA_ARGS>
 
         Run selected static checks for all applicable files. You should specify static check that
         you would like to run or 'all' to run all checks. One of:
 
-                 all all-but-pylint bat-tests check-apache-license check-executables-have-shebangs
-                 check-hooks-apply check-merge-conflict check-xml debug-statements doctoc
-                 detect-private-key end-of-file-fixer flake8 forbid-tabs insert-license
-                 lint-dockerfile mixed-line-ending mypy pylint pylint-test setup-order shellcheck
+                 all all-but-pylint airflow-config-yaml base-operator bat-tests build
+                 build-providers-dependencies check-apache-license check-executables-have-shebangs
+                 check-hooks-apply check-integrations check-merge-conflict check-xml
+                 consistent-pylint daysago-import-check debug-statements detect-private-key doctoc
+                 end-of-file-fixer fix-encoding-pragma flake8 forbid-tabs
+                 incorrect-use-of-LoggingMixin insert-license isort lint-dockerfile mixed-line-ending
+                 mypy provide-create-sessions pydevd pylint pylint-tests python-no-log-warn
+                 rst-backticks setup-order shellcheck stylelint trailing-whitespace
+                 update-breeze-file update-extras update-local-yml-file update-setup-cfg-file
+                 yamllint
 
         You can pass extra arguments including options to the pre-commit framework as
         <EXTRA_ARGS> passed after --. For example:
@@ -1098,7 +1201,7 @@ This is the current syntax for  `./breeze <./breeze>`_:
 
   Detailed usage for command: test-target
 
-  breeze [FLAGS] test-target -- <EXTRA_ARGS>
+  breeze [FLAGS] test-target <TEST_TARGET> -- <EXTRA_ARGS>
 
         Run the specified unit test target. There might be multiple
         targets specified separated with comas. The <EXTRA_ARGS> passed after -- are treated
@@ -1306,6 +1409,12 @@ This is the current syntax for  `./breeze <./breeze>`_:
                  async,aws,azure,celery,dask,elasticsearch,gcp,kubernetes,mysql,postgres,redis,slack,
                  ssh,statsd,virtualenv
 
+  --additional-extras
+          Additional extras to pass to build images The default is no additional extras.
+
+  --additional-python-deps
+          Additional python dependencies to use when building the images.
+
   -C, --force-clean-images
           Force build images with cache disabled. This will remove the pulled or build images
           and start building images from scratch. This might take a long time.
@@ -1327,6 +1436,17 @@ This is the current syntax for  `./breeze <./breeze>`_:
 
   -H, --dockerhub-repo
           DockerHub repository used to pull, push, build images. Default: airflow.
+
+  ****************************************************************************************************
+   Flags for generation of the backport packages
+
+  -S, --version-suffix-for-pypi
+          Adds optional suffix to the version in the generated backport package. It can be used
+          to generate rc1/rc2 ... versions of the packages to be uploaded to PyPI.
+
+  -N, --version-suffix-for-svn
+          Adds optional suffix to the generated names of package. It can be used to generate
+          rc1/rc2 ... versions of the packages to be uploaded to SVN.
 
   ****************************************************************************************************
    Increase verbosity of the scripts

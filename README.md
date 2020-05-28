@@ -344,6 +344,7 @@ Currently **officially** using Airflow:
 1. [Grab](https://www.grab.com/sg/) [[@calvintran](https://github.com/canhtran)]
 1. [Gradeup](https://gradeup.co) [[@gradeup](https://github.com/gradeup)]
 1. [Grand Rounds](https://www.grandrounds.com/) [[@richddr](https://github.com/richddr), [@timz1290](https://github.com/timz1290), [@wenever](https://github.com/@wenever), & [@runongirlrunon](https://github.com/runongirlrunon)]
+1. [Greytip](https://www.greytip.com) [[@greytip](https://github.com/greytip)]
 1. [Groupalia](http://es.groupalia.com) [[@jesusfcr](https://github.com/jesusfcr)]
 1. [Groupon](https://groupon.com) [[@stevencasey](https://github.com/stevencasey)]
 1. [Growbots](https://www.growbots.com/)[[@exploy](https://github.com/exploy)]
@@ -432,6 +433,7 @@ Currently **officially** using Airflow:
 1. [Pagar.me](https://pagar.me/) [[@pagarme](https://github.com/pagarme)]
 1. [Palo Alto Networks](https://www.paloaltonetworks.com/) [[@PaloAltoNetworks](https://github.com/PaloAltoNetworks)]
 1. [Pandora Media](https://www.pandora.com/) [[@Acehaidrey](https://github.com/Acehaidrey) & [@wolfier](https://github.com/wolfier)]
+1. [Paraná Banco](https://paranabanco.com.br/) [[@lopesdiego12](https://github.com/lopesdiego12/)]
 1. [PayFit](https://payfit.com) [[@pcorbel](https://github.com/pcorbel)]
 1. [PAYMILL](https://www.paymill.com/) [[@paymill](https://github.com/paymill) & [@matthiashuschle](https://github.com/matthiashuschle)]
 1. [PayPal](https://www.paypal.com/) [[@r39132](https://github.com/r39132) & [@jhsenjaliya](https://github.com/jhsenjaliya)]
@@ -530,6 +532,7 @@ Currently **officially** using Airflow:
 1. [Wildlifestudios](https://wildlifestudios.com/)
 1. [WiseBanyan](https://wisebanyan.com/)
 1. [Wooga](https://www.wooga.com/)
+1. [WorldRemit](https://www.worldremit.com/) [[@boittega](https://github.com/boittega)]
 1. [Wrike](https://www.wrike.com) [[@eliseealex](https://github.com/eliseealex) & [teoretic6](https://github.com/Teoretic6)]
 1. [Xero](https://www.xero.com/) [[@yan9yu](https://github.com/yan9yu) & [adamantnz](https://github.com/adamantnz/)]
 1. [Xoom](https://www.xoom.com/)

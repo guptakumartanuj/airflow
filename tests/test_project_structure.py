@@ -57,7 +57,7 @@ class TestProjectStructure(unittest.TestCase):
             self.assert_file_not_contains(filename, "providers")
 
     def test_deprecated_packages(self):
-        for directory in ["operator", "hooks", "sensors", "task_runner"]:
+        for directory in ["hooks", "operators", "secrets", "sensors", "task_runner"]:
             path_pattern = f"{ROOT_FOLDER}/airflow/contrib/{directory}/*.py"
 
             for filename in glob.glob(path_pattern, recursive=True):
@@ -129,13 +129,10 @@ class TestProjectStructure(unittest.TestCase):
 
 class TestGoogleProviderProjectStructure(unittest.TestCase):
     MISSING_EXAMPLE_DAGS = {
-        ('cloud', 'text_to_speech'),
         ('cloud', 'adls_to_gcs'),
         ('cloud', 'sql_to_gcs'),
         ('cloud', 's3_to_gcs'),
-        ('cloud', 'translate_speech'),
         ('cloud', 'bigquery_to_mysql'),
-        ('cloud', 'speech_to_text'),
         ('cloud', 'cassandra_to_gcs'),
         ('cloud', 'mysql_to_gcs'),
         ('cloud', 'mssql_to_gcs'),
@@ -162,11 +159,8 @@ class TestGoogleProviderProjectStructure(unittest.TestCase):
         'mysql_to_gcs',
         'postgres_to_gcs',
         's3_to_gcs',
-        'speech_to_text',
         'sql_to_gcs',
         'tasks',
-        'text_to_speech',
-        'translate_speech'
     }
 
     def test_example_dags(self):
@@ -250,7 +244,7 @@ class TestOperatorsHooks(unittest.TestCase):
         files = itertools.chain(*[
             glob.glob(f"{ROOT_FOLDER}/{part}/providers/**/{resource_type}/*.py", recursive=True)
             for resource_type in ["operators", "hooks", "sensors", "example_dags"]
-            for part in ["airlfow", "tests"]
+            for part in ["airflow", "tests"]
         ])
 
         invalid_files = [
